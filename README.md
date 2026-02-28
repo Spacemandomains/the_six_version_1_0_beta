@@ -1,62 +1,112 @@
-# AI CPO Agent
+# AI CPO Agent — The Six SaaS
 
-This repository contains the source code, prompt architecture, and documentation for an AI‑powered Chief Product Officer (CPO) built for founders of SaaS businesses.
+An AI-powered Chief Product Officer built for SaaS founders. It acts as an always-available executive that translates founder vision into structured product strategy using Google Gemini AI.
 
-## Purpose
+## What It Does
 
-The AI CPO acts as an always‑available executive that translates founder vision into structured product strategy. It owns the product roadmap, writes documentation, prioritizes features, monitors key metrics, and ensures execution discipline so founders can focus on vision and growth.
+The AI CPO monitors your Google Doc for "Dear CPO" messages and automatically generates:
 
-### Key capabilities
+- **Daily Recap** — structured summary of what happened (outcome, decisions, blockers)
+- **Daily CPO Brief** — strategic guidance with focus, next action, kill list, and a question for you
+- **Customer Recap** — polished external product update (optional, separate doc)
+- **Task Tracking** — assign tasks via "Dear CPO, task: ..." with due dates and completion tracking
 
-- Define the ideal customer profile (ICP) and articulate the value proposition.
-- Capture product‑market‑fit signals and use them to inform roadmaps.
-- Generate Product Requirement Documents (PRDs), feature specifications, user stories, technical handoff docs, release notes, and strategy memos.
-- Build quarterly roadmaps and break them into sprints with clear prioritization using frameworks like RICE/ICE.
-- Analyse activation, retention, churn and revenue data to drive decisions.
-- Challenge vague ideas and prevent "shiny object syndrome" by demanding clarity and metrics.
+## Tech Stack
 
-## Repository structure
+- **Python 3.11** / **FastAPI** with Jinja2 templates
+- **PostgreSQL** via SQLAlchemy ORM
+- **Google Gemini AI** for content generation
+- **Google Docs API** for reading/writing documents
+- **APScheduler** for background monitoring
 
-```
-├── README.md               # you are here
-├── LICENSE                 # choose an appropriate license (e.g. MIT)
-├── .env.example            # example environment variables
-├── app/
-│   ├── main.py             # API entrypoint / server
-│   ├── cpo_agent.py        # agent orchestration logic
-│   └── tools.py            # definitions of additional tools/capabilities
-├── prompts/
-│   ├── system.md           # AI identity and system instructions
-│   ├── policies.md         # tone, style, and operational constraints
-│   └── workflows/
-│       ├── prd.md          # Product Requirements Document template
-│       ├── roadmap.md       # Roadmap generation workflow
-│       └── sprint_planning.md  # Sprint planning workflow
-├── schemas/
-│   ├── prd.schema.json     # JSON schema for PRD outputs
-│   ├── roadmap.schema.json # JSON schema for roadmap outputs
-│   └── sprint.schema.json  # JSON schema for sprint plans
-├── memory/
-│   ├── product_brief.md    # current SaaS product information
-│   └── decisions.md        # decision log for transparency
-├── evals/
-│   ├── test_cases.json     # test cases to validate agent outputs
-│   └── score.py            # simple evaluator script
-├── docs/
-│   ├── api.md              # API endpoints documentation
-│   └── runbook.md          # operational runbook for founders
-└── .github/
-    └── workflows/
-        └── ci.yml          # CI configuration to lint, test and run evals
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `GEMINI_API_KEY` | Yes | Google Gemini API key |
+| `JOB_SECRET` | Yes | Secret for the fallback job trigger endpoint |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Yes (Render) | Google Service Account JSON key (see setup below) |
+
+## Local Development
+
+```bash
+pip install -r requirements.txt
+export DATABASE_URL="postgresql://user:pass@localhost:5432/ai_cpo"
+export GEMINI_API_KEY="your-key"
+export JOB_SECRET="your-secret"
+export GOOGLE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'
+uvicorn app.main:app --host 0.0.0.0 --port 5000 --reload
 ```
 
-## Getting started
+## Deploy on Render
 
-1. Clone the repository and install dependencies.
-2. Create a `.env` file based on `.env.example` and add your API keys (e.g. OpenAI).
-3. Run `python app/main.py` to start the API or CLI.
-4. Review the prompts in the `prompts/` directory and update `memory/product_brief.md` to reflect your own SaaS product details.
+### 1. Create the Service
 
-## Contributing
+- Go to [render.com](https://render.com) and click **New > Blueprint**
+- Connect your GitHub repo (`Spacemandomains/the_saas_version_1_0`)
+- Render will detect the `render.yaml` and set up a web service + PostgreSQL database automatically
 
-Contributions are welcome! Please open issues or pull requests for improvements or bug fixes. See `docs/api.md` and `docs/runbook.md` for more details on how to extend the agent.
+**Or manually:**
+- Click **New > Web Service**, connect the repo
+- Set **Build Command**: `pip install -r requirements.txt`
+- Set **Start Command**: `gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT`
+- Click **New > PostgreSQL** to create a database, then copy the **Internal Database URL** into the `DATABASE_URL` env var
+
+### 2. Set Environment Variables
+
+In your Render web service settings, add:
+
+- `DATABASE_URL` — from your Render PostgreSQL (Internal Connection String)
+- `GEMINI_API_KEY` — your Google Gemini API key
+- `JOB_SECRET` — any strong random string
+- `GOOGLE_SERVICE_ACCOUNT_JSON` — the full JSON key from Google (see below)
+
+### 3. Set Up Google Service Account
+
+This is how the AI CPO reads and writes to your Google Docs on Render:
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or use an existing one)
+3. Enable the **Google Docs API**:
+   - Go to **APIs & Services > Library**
+   - Search for "Google Docs API" and click **Enable**
+4. Create a Service Account:
+   - Go to **APIs & Services > Credentials**
+   - Click **Create Credentials > Service Account**
+   - Give it a name (e.g., "ai-cpo-docs")
+   - Click **Done**
+5. Create a key:
+   - Click on the service account you just created
+   - Go to the **Keys** tab
+   - Click **Add Key > Create new key > JSON**
+   - Download the JSON file
+6. Copy the entire JSON content and paste it as the `GOOGLE_SERVICE_ACCOUNT_JSON` environment variable on Render
+7. **Share your Google Docs** with the service account:
+   - Find the service account email in the JSON file (the `client_email` field, looks like `ai-cpo-docs@your-project.iam.gserviceaccount.com`)
+   - Open each Google Doc (source, output, recap) and click **Share**
+   - Add the service account email with **Editor** access
+
+### 4. Deploy
+
+Click **Manual Deploy > Deploy latest commit** in Render, or push to your GitHub repo and Render will auto-deploy.
+
+### 5. Create Your Account
+
+Visit your Render URL and sign up. Then configure your Google Doc IDs in the CPO Dashboard settings.
+
+## Project Structure
+
+```
+app/
+  main.py          - FastAPI entrypoint, API + page routes
+  scheduler.py     - APScheduler background monitoring
+  cpo_agent.py     - Gemini AI agent orchestration
+  daily_job.py     - Daily automation pipeline
+  db.py            - SQLAlchemy models and database setup
+  auth.py          - API key auth, password hashing
+  google_docs.py   - Google Docs API (Service Account + Replit connector)
+  tools.py         - Scoring utilities
+templates/         - Jinja2 HTML templates
+static/            - Static assets
+```

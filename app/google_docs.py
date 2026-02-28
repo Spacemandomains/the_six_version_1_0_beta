@@ -8,12 +8,31 @@ from typing import Any, Dict, Optional
 import requests
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
 
 _connection_settings: Optional[Dict[str, Any]] = None
 _settings_fetched_at: float = 0
 
+SCOPES = ["https://www.googleapis.com/auth/documents"]
 
-def _get_access_token() -> str:
+
+def _is_replit_env() -> bool:
+    return bool(os.getenv("REPLIT_CONNECTORS_HOSTNAME"))
+
+
+def _get_service_account_creds():
+    sa_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not sa_json:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set. "
+            "Provide a Google Service Account JSON key to use Google Docs."
+        )
+    info = json.loads(sa_json)
+    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    return creds
+
+
+def _get_replit_access_token() -> str:
     global _connection_settings, _settings_fetched_at
 
     if (
@@ -78,8 +97,11 @@ def _parse_expiry(expires_at: Any) -> float:
 
 
 def _get_docs_service():
-    access_token = _get_access_token()
-    creds = Credentials(token=access_token)
+    if _is_replit_env():
+        access_token = _get_replit_access_token()
+        creds = Credentials(token=access_token)
+    else:
+        creds = _get_service_account_creds()
     return build("docs", "v1", credentials=creds, cache_discovery=False)
 
 
